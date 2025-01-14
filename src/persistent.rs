@@ -5,6 +5,41 @@ use serde::{Serialize, Deserialize};
 use std::path::Path;
 use serde::de::Error;
 
+/// Cache qui stock les données dans un fichier.
+///
+/// # Exemples
+///
+/// ```
+/// use eval_rust::CacheDB;
+/// use eval_rust::errors::CustomError;
+///
+/// # fn main() -> Result<(), CustomError> {
+/// // Crée un nouveau cache avec une capacité de 5 éléments et le chemin du fichier "cache.txt".
+/// let mut cache = CacheDB::<String, i32>::new_persistent(5, "cache.txt")?;
+///
+/// // Ajouter des éléments au cache.
+/// cache.put("pomme".to_string(), 1)?;
+/// cache.put("banane".to_string(), 2)?;
+/// cache.put("orange".to_string(), 3)?;
+///
+/// // Récupre la valeur associée à une clé.
+/// if let Some(valeur) = cache.get(&"pomme".to_string()) {
+///     println!("La valeur de pomme est: {}", valeur);
+/// }
+///
+/// // Supprime un élément du cache.
+/// cache.remove(&"banane".to_string())?;
+///
+/// // Itère sur les éléments du cache
+/// for (key, value) in cache.iter() {
+///     println!("Clé: {}, Valeur: {}", key, value);
+/// }
+///
+/// // Vide le cache.
+/// cache.clear()?;
+/// # Ok(())
+/// # }
+/// ```
 pub struct CacheDB<K, V>
 where
     K: Eq + Clone + ToString + Serialize + for<'de> Deserialize<'de>,
@@ -20,6 +55,30 @@ where
     K: Eq + Clone + ToString + Serialize + for<'de> Deserialize<'de>,
     V: Clone + ToString + Serialize + for<'de> Deserialize<'de>,
 {
+    /// Crée un nouveau cache avec la capacité et le chemin du fichier spécifiés.
+    ///
+    /// Si le fichier existe, le cache est chargé à partir de celui-ci. Sinon, un nouveau cache vide est créé.
+    ///
+    /// # Arguments
+    ///
+    /// * `capacity` - La capacité maximale du cache.
+    /// * `file_path` - Le chemin du fichier où le cache sera stocké.
+    ///
+    /// # Retour
+    ///
+    /// Retourne un `Result` ou une erreur `CustomError` si une erreur s'est produite.
+    ///
+    /// # Exemples
+    ///
+    /// ```
+    /// use eval_rust::CacheDB;
+    /// use eval_rust::errors::CustomError;
+    ///
+    /// # fn main() -> Result<(), CustomError> {
+    /// let cache = CacheDB::<String, String>::new_persistent(10, "cache.txt")?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn new_persistent(capacity: usize, file_path: &str) -> Result<Self, CustomError> {
         let file_path_clone = file_path.to_string();
         let cache = Vec::with_capacity(capacity);
@@ -37,6 +96,25 @@ where
         Ok(persistent_cache)
     }
 
+    /// Sauvegarde le cache dans le fichier.
+    ///
+    /// # Retour
+    ///
+    /// Retourne `Ok(())` si le cache a été sauvegardé avec succès, ou une erreur `CustomError` si une erreur s'est produite.
+    ///
+    /// # Exemples
+    ///
+    /// ```
+    /// use eval_rust::CacheDB;
+    /// use eval_rust::errors::CustomError;
+    ///
+    /// # fn main() -> Result<(), CustomError> {
+    /// let mut cache = CacheDB::<String, i32>::new_persistent(5, "cache.txt")?;
+    /// cache.put("pomme".to_string(), 1)?;
+    /// cache.save()?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn save(&self) -> Result<(), CustomError> {
         let file = match OpenOptions::new()
             .write(true)
@@ -76,6 +154,24 @@ where
         Ok(())
     }
 
+    /// Charge le cache à partir du fichier.
+    ///
+    /// # Retour
+    ///
+    /// Retourne `Ok(())` si le cache a été chargé avec succès, ou une erreur `CustomError` si une erreur s'est produite.
+    ///
+    /// # Exemples
+    ///
+    /// ```
+    /// use eval_rust::CacheDB;
+    /// use eval_rust::errors::CustomError;
+    ///
+    /// # fn main() -> Result<(), CustomError> {
+    /// let mut cache = CacheDB::<String, i32>::new_persistent(5, "cache.txt")?;
+    /// cache.load()?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn load(&mut self) -> Result<(), CustomError> {
         let file = match File::open(&self.file_path) {
             Ok(file) => file,
@@ -113,6 +209,33 @@ where
         Ok(())
     }
 
+    /// Insère une paire clé-valeur dans le cache.
+    ///
+    /// Si la clé existe déjà, la valeur associée est mise à jour.
+    /// Si le cache est plein, l'élément le moins récemment utilisé est supprimé.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - La clé à insérer.
+    /// * `value` - La valeur à associer à la clé.
+    ///
+    /// # Retour
+    ///
+    /// Retourne `Ok(())` si l'insertion a réussi, ou une erreur `CustomError` si une erreur s'est produite.
+    ///
+    /// # Exemples
+    ///
+    /// ```
+    /// use eval_rust::CacheDB;
+    /// use eval_rust::errors::CustomError;
+    ///
+    /// # fn main() -> Result<(), CustomError> {
+    /// let mut cache = CacheDB::<String, i32>::new_persistent(5, "cache.txt")?;
+    /// cache.put("pomme".to_string(), 1)?;
+    /// cache.put("banane".to_string(), 2)?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn put(&mut self, key: K, value: V) -> Result<(), CustomError> {
         if let Some(index) = self.cache.iter().position(|(k, _)| k == &key) {
             if let Some((_, val)) = self.cache.get_mut(index) {
@@ -131,6 +254,34 @@ where
         self.save()
     }
 
+    /// Récupère la valeur associée à une clé dans le cache.
+    ///
+    /// Si la clé est trouvée, la valeur correspondante est retournée et l'élément est marqué comme récemment utilisé.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - La clé à rechercher.
+    ///
+    /// # Retour
+    ///
+    /// Retourne `Some(&V)` contenant une référence à la valeur associée à la clé si elle est trouvée, ou `None` si la clé n'est pas dans le cache.
+    ///
+    /// # Exemples
+    ///
+    /// ```
+    /// use eval_rust::CacheDB;
+    /// use eval_rust::errors::CustomError;
+    ///
+    /// # fn main() -> Result<(), CustomError> {
+    /// let mut cache = CacheDB::<String, i32>::new_persistent(5, "cache.txt")?;
+    /// cache.put("pomme".to_string(), 1)?;
+    ///
+    /// if let Some(valeur) = cache.get(&"pomme".to_string()) {
+    ///     println!("La valeur de pomme est: {}", valeur);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn get(&mut self, key: &K) -> Option<&V> {
         if let Some(index) = self.cache.iter().position(|(k, _)| k == key) {
             let element = self.cache.remove(index);
@@ -140,6 +291,29 @@ where
         None
     }
 
+    /// Supprime l'élément associé à une clé du cache.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - La clé à supprimer.
+    ///
+    /// # Retour
+    ///
+    /// Retourne `Ok(())` si la clé a été trouvée et supprimée, ou une erreur `CustomError` si une erreur s'est produite.
+    ///
+    /// # Exemples
+    ///
+    /// ```
+    /// use eval_rust::CacheDB;
+    /// use eval_rust::errors::CustomError;
+    ///
+    /// # fn main() -> Result<(), CustomError> {
+    /// let mut cache = CacheDB::<String, i32>::new_persistent(5, "cache.txt")?;
+    /// cache.put("pomme".to_string(), 1)?;
+    /// cache.remove(&"pomme".to_string())?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn remove(&mut self, key: &K) -> Result<(), CustomError> {
         if let Some(index) = self.cache.iter().position(|(k, _)| k == key){
             self.cache.remove(index);
@@ -150,15 +324,69 @@ where
         }
     }
 
+    /// Vide le cache.
+    ///
+    /// # Retour
+    ///
+    /// Retourne `Ok(())` si le cache a été vidé avec succès, ou une erreur `CustomError` si une erreur s'est produite.
+    ///
+    /// # Exemples
+    ///
+    /// ```
+    /// use eval_rust::CacheDB;
+    /// use eval_rust::errors::CustomError;
+    ///
+    /// # fn main() -> Result<(), CustomError> {
+    /// let mut cache = CacheDB::<String, i32>::new_persistent(5, "cache.txt")?;
+    /// cache.put("pomme".to_string(), 1)?;
+    /// cache.clear()?;
+    /// assert_eq!(cache.len(), 0);
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn clear(&mut self) -> Result<(), CustomError> {
         self.cache.clear();
         self.save()
     }
 
+    /// Retourne un itérateur sur les éléments du cache.
+    ///
+    /// # Exemples
+    ///
+    /// ```
+    /// use eval_rust::CacheDB;
+    /// use eval_rust::errors::CustomError;
+    ///
+    /// # fn main() -> Result<(), CustomError> {
+    /// let mut cache = CacheDB::<String, i32>::new_persistent(5, "cache.txt")?;
+    /// cache.put("pomme".to_string(), 1)?;
+    /// cache.put("banane".to_string(), 2)?;
+    ///
+    /// for (key, value) in cache.iter() {
+    ///     println!("Clé: {}, Valeur: {}", key, value);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn iter(&self) -> std::slice::Iter<(K, V)> {
         self.cache.iter()
     }
 
+    /// Retourne le nombre d'éléments dans le cache.
+    ///
+    /// # Exemples
+    ///
+    /// ```
+    /// use eval_rust::CacheDB;
+    /// use eval_rust::errors::CustomError;
+    ///
+    /// # fn main() -> Result<(), CustomError> {
+    /// let mut cache = CacheDB::<String, i32>::new_persistent(5, "cache.txt")?;
+    /// cache.put("pomme".to_string(), 1)?;
+    /// assert_eq!(cache.len(), 1);
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn len(&self) -> usize {
         self.cache.len()
     }

@@ -15,3 +15,5 @@
 // 3: Cache qui se store dans un fichier (Cache::new_persistent(3, "mon_cache.txt"))
 // 4: Performances (https://crates.io/crates/criterion si vous voulez mesurer)
 
+
+//generate doc command: cargo doc --open
